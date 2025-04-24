@@ -41,7 +41,7 @@
           </ion-text>
         </ion-card-content>
       </ion-card>
-
+      <div id='map' style='width: 400px; height: 300px;'></div>
       <ion-alert
         :is-open="showAlert"
         header="Resultado del QR"
@@ -55,19 +55,21 @@
 
 
 <script setup lang="ts">
-import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar, IonButton, IonList, IonItem, IonAlert } from '@ionic/vue';
+import { IonContent, IonHeader, IonPage, IonTitle, IonToolbar, IonButton, IonList, IonItem, IonAlert, IonLabel, IonCardContent, IonCard, IonText, IonCardTitle, IonCardHeader } from '@ionic/vue';
 import { CapacitorBarcodeScanner } from '@capacitor/barcode-scanner';
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import mapboxgl from 'mapbox-gl';
 
 const historial = ref<string[]>([]);
 const showAlert = ref(false);
 const alertMessage = ref('');
-
+const map = ref<any>(null);
+const marker = ref<any>(null);
 
 const scan = async () => {
   try {
-    await CapacitorBarcodeScanner.scanBarcode({ hint: 17 });
-    const result = await CapacitorBarcodeScanner.scanBarcode({hint: 17});
+    const result = await CapacitorBarcodeScanner.scanBarcode({ hint: 17 });
     if (result.ScanResult) {
       historial.value.push(result.ScanResult);
       handleScanResult(result.ScanResult);
@@ -82,10 +84,35 @@ const handleScanResult = (content: string) => {
     window.open(content, '_blank');
   } else if (content.includes('@') && content.includes('.')) {
     window.location.href = `mailto:${content}`;
-  } else {
-    alertMessage.value = ` Contenido del QR: ${content}`;
+  } else if (isCoordinates(content)) {
+    const [lat, lng] = parseCoordinates(content);
+    updateMapCoordinates(lat, lng);
+    alertMessage.value = `Coordenadas: Latitud ${lat}, Longitud ${lng}`;
     showAlert.value = true;
-    
+  } else {
+    alertMessage.value = `Contenido del QR: ${content}`;
+    showAlert.value = true;
+  }
+};
+
+const isCoordinates = (content: string): boolean => {
+  const regex = /^-?\d+(\.\d+)?,\s*-?\d+(\.\d+)?$/;
+  return regex.test(content);
+};
+
+const parseCoordinates = (content: string): [number, number] => {
+  const [lat, lng] = content.split(',').map(coord => parseFloat(coord.trim()));
+  return [lat, lng];
+};
+
+const updateMapCoordinates = (lat: number, lng: number) => {
+  if (map.value) {
+    map.value.setCenter([lng, lat]);
+    if (marker.value) {
+      marker.value.setLngLat([lng, lat]);
+    } else {
+      marker.value = new mapboxgl.Marker().setLngLat([lng, lat]).addTo(map.value);
+    }
   }
 };
 
@@ -96,6 +123,18 @@ const handleItemClick = (item: string) => {
 const clearHistory = () => {
   historial.value = [];
 };
+
+onMounted(() => {
+  mapboxgl.accessToken = 'pk.eyJ1IjoiZmlvemciLCJhIjoiY205dWw3YWV4MGFnNjJtcHZzbHF1c2k5eCJ9.1SGZfQ1FdzYU9xun48xiAA';
+  map.value = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v12',
+    center: [-74.5, 40],
+    zoom: 9,
+  });
+  if (map.value) {
+    marker.value = new mapboxgl.Marker().setLngLat([-74.5, 40]).addTo(map.value);  }
+});
 </script>
 
 <style scoped>
